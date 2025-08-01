@@ -52,23 +52,25 @@ def write_to_excel_with_image(book, comment, filename=r"C:\Users\seki8\OneDrive\
         os.remove("cover_tmp.png")
 
 def search_books_google_books(title):
+    url = 'https://www.googleapis.com/books/v1/volumes'
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
     params = {
         'q': title,
         'maxResults': 10,
         'printType': 'books',
         'langRestrict': 'ja',
     }
-    response = requests.get('https://www.googleapis.com/books/v1/volumes', params=params)
+
+    response = requests.get(url, headers=headers, params=params)
     data = response.json()
 
-    if 'items' not in data:
-        return None
-    
-    books = []
+    results = []
 
     for item in data['items']:
         info = item['volumeInfo']
-        books.append({
+        results.append({
             'title': info.get('title', ''),
             'authors': ', '.join(info.get('authors', [])),
             'publishedDate': info.get('publishedDate', ''),
@@ -76,7 +78,7 @@ def search_books_google_books(title):
             'thumbnail': info.get('imageLinks', {}).get('thumbnail', ''),
             'publisher': info.get('publisher', ''),
         })
-    return books
+    return results
 
 # Streamlit アプリ
 st.title("📚 読書ノート:シリーズ対応版（Google Books API）")
