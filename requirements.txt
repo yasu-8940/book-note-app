@@ -3,3 +3,4 @@ requests
 pillow
 openpyxl
 pandas
+google-api-python-client
