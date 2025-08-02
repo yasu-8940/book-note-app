@@ -63,26 +63,32 @@ def search_books_google_books(title):
         'langRestrict': 'ja',
     }
 
-    response = requests.get(url, headers=headers, params=params)
-    data = response.json()
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        data = response.json()
+    
+        # Google Books APIからデータが取得できなかった場合
+        if 'items' not in data:
+            st.warning("該当する書籍が見つかりませんでした。検索語句を変えてみてください。")
+            return []
+    
+        results = []
 
-    results = []
+        for item in data['items']:
+            info = item['volumeInfo']
+            results.append({
+                'title': info.get('title', ''),
+                'authors': ', '.join(info.get('authors', [])),
+                'publishedDate': info.get('publishedDate', ''),
+                'description': info.get('description', ''),
+                'thumbnail': info.get('imageLinks', {}).get('thumbnail', ''),
+                'publisher': info.get('publisher', ''),
+            })
+        return results
 
-    # 'items' が存在するかチェック
-    if 'items' not in data:
-        return results  # 空のリストを返す
-
-    for item in data['items']:
-        info = item['volumeInfo']
-        results.append({
-            'title': info.get('title', ''),
-            'authors': ', '.join(info.get('authors', [])),
-            'publishedDate': info.get('publishedDate', ''),
-            'description': info.get('description', ''),
-            'thumbnail': info.get('imageLinks', {}).get('thumbnail', ''),
-            'publisher': info.get('publisher', ''),
-        })
-    return results
+    except Exception as e:
+        st.error(f"エラーが発生しました: {e}")
+        return []
 
 # Streamlit アプリ
 st.title("📚 読書ノート:シリーズ対応版（Google Books API）")
@@ -129,3 +135,5 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     if st.button("Excelに保存"):
         write_to_excel_with_image(selected_book, comment)
         st.success("Excelに保存しました（表紙付き）！")
+
+
