@@ -68,6 +68,10 @@ def search_books_google_books(title):
 
     results = []
 
+    # 'items' が存在するかチェック
+    if 'items' not in data:
+        return results  # 空のリストを返す
+
     for item in data['items']:
         info = item['volumeInfo']
         results.append({
@@ -86,8 +90,13 @@ st.title("📚 読書ノート:シリーズ対応版（Google Books API）")
 search_query = st.text_input("書名を入力してください（シリーズ名もOK）：")
 
 if st.button("候補を検索"):
-    results = search_books_google_books(search_query)
-    st.session_state['search_results'] = results
+    try:
+        results = search_books_google_books(search_query)
+        st.session_state['search_results'] = results
+    except Exception as e:
+        st.error(f"⚠️ エラーが発生しました: {e}")
+    # results = search_books_google_books(search_query)
+    # st.session_state['search_results'] = results
 
 # 結果がある場合のみ処理
 if 'search_results' in st.session_state and st.session_state['search_results']:
