@@ -66,8 +66,8 @@ def search_books_google_books(title):
     try:
         response = requests.get(url, headers=headers, params=params)
 
-        st.write(f"✅ ステータスコード: response.status_code")
-        st.write(f"🌐 実際のリクエストURL: response.url")
+        st.write(f"✅ ステータスコード: {response.status_code}")
+        st.write(f"🌐 実際のリクエストURL: {response.url}")
 
         if response.status_code != 200:
             st.error("❌ Google Books APIへのアクセスに失敗しました。")
@@ -143,6 +143,7 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     if st.button("Excelに保存"):
         write_to_excel_with_image(selected_book, comment)
         st.success("Excelに保存しました（表紙付き）！")
+
 
 
 
