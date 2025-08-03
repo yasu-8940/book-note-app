@@ -53,6 +53,9 @@ def write_to_excel_with_image(book, comment, filename=r"C:\Users\seki8\OneDrive\
 
 def search_books_google_books(title):
     url = 'https://www.googleapis.com/books/v1/volumes'
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
     params = {
         'q': title,
         'maxResults': 10,
@@ -60,12 +63,11 @@ def search_books_google_books(title):
         'langRestrict': 'ja',
         'key': 'AIzaSyA0gXAcX6_aShRD4eKPA6ag_4QBTQtvC0w'
     }
-
     try:
         response = requests.get(url, headers=headers, params=params)
 
-        st.write(f"✅ ステータスコード: {response.status_code}")
-        st.write(f"🌐 実際のリクエストURL: {response.url}")
+        st.write(f"✅ ステータスコード: response.status_code")
+        st.write(f"🌐 実際のリクエストURL: response.url")
 
         if response.status_code != 200:
             st.error("❌ Google Books APIへのアクセスに失敗しました。")
@@ -76,6 +78,7 @@ def search_books_google_books(title):
 
         if 'items' not in data:
             st.warning("⚠️ 書籍が見つかりませんでした。")
+            return []
 
         results = []
 
@@ -88,7 +91,7 @@ def search_books_google_books(title):
                 'description': info.get('description', ''),
                 'thumbnail': info.get('imageLinks', {}).get('thumbnail', ''),
                 'publisher': info.get('publisher', ''),
-            })
+         })
         return results
 
     except Exception as e:
