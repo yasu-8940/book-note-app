@@ -65,13 +65,20 @@ def search_books_google_books(title):
 
     try:
         response = requests.get(url, headers=headers, params=params)
-        data = response.json()
-    
-        # Google Books APIからデータが取得できなかった場合
-        if 'items' not in data:
-            st.warning("該当する書籍が見つかりませんでした。検索語句を変えてみてください。")
+
+        st.write(f"✅ ステータスコード: {response.status_code}")
+        st.write(f"🌐 実際のリクエストURL: {response.url}")
+
+        if response.status_code != 200:
+            st.error("❌ Google Books APIへのアクセスに失敗しました。")
             return []
-    
+
+        data = response.json()
+        st.write("📦 APIレスポンス:", data)
+
+        if 'items' not in data:
+            st.warning("⚠️ 書籍が見つかりませんでした。")
+
         results = []
 
         for item in data['items']:
@@ -135,5 +142,7 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     if st.button("Excelに保存"):
         write_to_excel_with_image(selected_book, comment)
         st.success("Excelに保存しました（表紙付き）！")
+
+
 
 
