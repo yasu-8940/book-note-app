@@ -54,7 +54,7 @@ def write_to_excel_with_image(book, comment, filename=r"C:\Users\seki8\OneDrive\
 def search_books_google_books(title):
     url = 'https://www.googleapis.com/books/v1/volumes'
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        'User-Agent': 'python-requests/2.32.4'
     }
     params = {
         'q': title,
@@ -144,6 +144,7 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     if st.button("Excelに保存"):
         write_to_excel_with_image(selected_book, comment)
         st.success("Excelに保存しました（表紙付き）！")
+
 
 
 
