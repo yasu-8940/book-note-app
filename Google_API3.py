@@ -9,73 +9,47 @@ from io import BytesIO
 import os
 from datetime import datetime
 
-def write_to_excel_with_image(book, comment, filename=r"C:\Users\seki8\OneDrive\デスクトップ\python_lesson\読書ノート.xlsx"):
-    if os.path.exists(filename):
-        wb = load_workbook(filename)
-        ws = wb.active
-    else:
-        wb = Workbook()
-        ws = wb.active
-        ws.append(['登録日', '書名', '著者', '出版社', '出版日', '概要', '感想', '表紙'])
-
-    # ✅ 今日の日付（登録日）
-    today = datetime.today().strftime("%Y-%m-%d")
-
-    # 書誌データ
-    row = [
-        today,
-        book['title'],
-        book['authors'],
-        book['publisher'],
-        book['publishedDate'],
-        book['description'],
-        comment,
-        '',  # 画像用の列
-    ]
-    ws.append(row)
-
-    # 表紙画像があるなら貼り付け
-    if book['thumbnail']:
-        response = requests.get(book['thumbnail'])
-        img = Image.open(BytesIO(response.content))
-        img_path = "cover_tmp.png"
-        img.save(img_path)
-
-        excel_img = XLImage(img_path)
-        row_num = ws.max_row
-        ws.add_image(excel_img, f'G{row_num}')
-
-    wb.save(filename)
-
-    # 一時画像ファイル削除
-    if os.path.exists("cover_tmp.png"):
-        os.remove("cover_tmp.png")
+# CSVファイルに書き出し
+def write_to_csv(book, comment, filename=r"C:\Users\seki8\OneDrive\デスクトップ\python_lesson\読書ノート.csv"):
+    file_exists = os.path.isfile(filename)
+    with open(filename, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(['書名', '著者', '出版社', '出版日', '概要', '感想'])
+        writer.writerow([
+            book['title'],
+            book['authors'],
+            book['publisher'],
+            book['publishedDate'],
+            book['description'],
+            comment
+        ])
 
 def search_books_google_books(title):
     url = 'https://www.googleapis.com/books/v1/volumes'
     headers = {
-        'User-Agent': 'python-requests/2.32.4'
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
     params = {
         'q': title,
         'maxResults': 10,
         'printType': 'books',
         'langRestrict': 'ja',
-        # 'key': 'AIzaSyA0gXAcX6_aShRD4eKPA6ag_4QBTQtvC0w'
+        'key': 'AIzaSyA0gXAcX6_aShRD4eKPA6ag_4QBTQtvC0w'
     }
     try:
         response = requests.get(url, params=params)
         # response = requests.get(url, headers=headers, params=params)
 
-        st.write(f"✅ ステータスコード: {response.status_code}")
-        st.write(f"🌐 実際のリクエストURL: {response.url}")
+        # st.write(f"✅ ステータスコード: {response.status_code}")
+        # st.write(f"🌐 実際のリクエストURL: {response.url}")
 
-        if response.status_code != 200:
-            st.error("❌ Google Books APIへのアクセスに失敗しました。")
-            return []
+        # if response.status_code != 200:
+        #     st.error("❌ Google Books APIへのアクセスに失敗しました。")
+        #     return []
 
         data = response.json()
-        st.write("📦 APIレスポンス:", data)
+        # st.write("📦 APIレスポンス:", data)
 
         if 'items' not in data:
             st.warning("⚠️ 書籍が見つかりませんでした。")
@@ -141,10 +115,9 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     #     write_to_csv(selected_book, comment)
     #     st.success("CSVに保存しました！")
 
-    if st.button("Excelに保存"):
-        write_to_excel_with_image(selected_book, comment)
-        st.success("Excelに保存しました（表紙付き）！")
-
+    if st.button("CSVに保存"):
+        write_to_csv(selected_book, comment)
+        st.success("CSVに保存しました！")
 
 
 
