@@ -146,11 +146,12 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     st.markdown("---")
     comment = st.text_area("📖 感想を入力してください:")
 
-    # if st.button("CSVに保存"):
-    #     write_to_csv(selected_book, comment)
-    #     st.success("CSVに保存しました！")
+    if st.button("CSVに保存"):
+        write_to_csv(selected_book, comment)
+        st.success("CSVに保存しました！")
 
-    if st.button("Excelに保存"):
-        write_to_excel_with_image(selected_book, comment)
-        st.success("Excelに保存しました（表紙付き）！")
+    # if st.button("Excelに保存"):
+    #     write_to_excel_with_image(selected_book, comment)
+    #     st.success("Excelに保存しました（表紙付き）！")
+
 
