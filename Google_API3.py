@@ -81,7 +81,7 @@ def search_books_google_books(title):
         # 'key': 'AIzaSyA0gXAcX6_aShRD4eKPA6ag_4QBTQtvC0w'
     }
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, headers=headers, params=params)
 
 
         data = response.json()
@@ -153,5 +153,6 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     # if st.button("Excelに保存"):
     #     write_to_excel_with_image(selected_book, comment)
     #     st.success("Excelに保存しました（表紙付き）！")
+
 
 
