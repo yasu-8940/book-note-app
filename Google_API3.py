@@ -9,6 +9,7 @@ from io import BytesIO
 import os
 from datetime import datetime
 import pandas as pd
+import tempfile
 
 def create_excel_with_image(book, comment):
     wb = Workbook()
@@ -33,14 +34,28 @@ def create_excel_with_image(book, comment):
         try:
             response = requests.get(book['thumbnail'])
             img = Image.open(BytesIO(response.content))
-            img_path = "cover_tmp.png"
-            img.save(img_path)
+
+            # 一時ファイルパスを作成
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                img_path = tmp_file.name
+                img.save(img_path)
 
             excel_img = XLImage(img_path)
-            ws.add_image(excel_img, f'H2')  # 表紙画像は2行目のH列に
+            row_num = ws.max_row
+            ws.add_image(excel_img, f'H{row_num}')  # 画像列はH（8列目）
+
+        except Exception as e:
+            print(f"画像処理でエラー: {e}")
+    
+            # img_path = "cover_tmp.png"
+            # img.save(img_path)
+
+            # excel_img = XLImage(img_path)
+            # ws.add_image(excel_img, f'H2')  # 表紙画像は2行目のH列に
 
             # 一時ファイル削除
             os.remove(img_path)
+            
         except Exception as e:
             st.warning(f"画像挿入に失敗しました: {e}")
 
@@ -158,6 +173,7 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
             file_name="book_note.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
 
 
