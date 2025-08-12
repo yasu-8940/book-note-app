@@ -8,49 +8,48 @@ from PIL import Image
 from io import BytesIO
 import os
 from datetime import datetime
+import pandas as pd
 
-# EXCELファイルに書き出し
-def write_to_excel_with_image(book, comment, filename=r"C:\Users\seki8\OneDrive\デスクトップ\python_lesson\読書ノート.xlsx"):
-    if os.path.exists(filename):
-        wb = load_workbook(filename)
-        ws = wb.active
-    else:
-        wb = Workbook()
-        ws = wb.active
-        # ✅ 登録日を追加
-        ws.append(['登録日', '書名', '著者', '出版社', '出版日', '概要', '感想', '表紙'])
+def create_excel_with_image(book, comment):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['登録日', '書名', '著者', '出版社', '出版日', '概要', '感想', '表紙'])
 
-    # ✅ 今日の日付（登録日）
     today = datetime.today().strftime("%Y-%m-%d")
-
-    # 書誌データ
     row = [
-        today,  # ←登録日を先頭に
+        today,
         book['title'],
         book['authors'],
         book['publisher'],
         book['publishedDate'],
         book['description'],
         comment,
-        '',  # 画像用
+        ''
     ]
     ws.append(row)
 
-    # 表紙画像
+    # 表紙画像の取得・挿入
     if book['thumbnail']:
-        response = requests.get(book['thumbnail'])
-        img = Image.open(BytesIO(response.content))
-        img_path = "cover_tmp.png"
-        img.save(img_path)
+        try:
+            response = requests.get(book['thumbnail'])
+            img = Image.open(BytesIO(response.content))
+            img_path = "cover_tmp.png"
+            img.save(img_path)
 
-        excel_img = XLImage(img_path)
-        row_num = ws.max_row
-        ws.add_image(excel_img, f'H{row_num}')  # 画像列はH（8列目）
+            excel_img = XLImage(img_path)
+            ws.add_image(excel_img, f'H2')  # 表紙画像は2行目のH列に
 
-    wb.save(filename)
+            # 一時ファイル削除
+            os.remove(img_path)
+        except Exception as e:
+            st.warning(f"画像挿入に失敗しました: {e}")
 
-    if os.path.exists("cover_tmp.png"):
-        os.remove("cover_tmp.png")
+    # Excelバイナリとして保存
+    excel_io = BytesIO()
+    wb.save(excel_io)
+    excel_io.seek(0)
+
+    return excel_io
 
 # CSVファイルに書き出し
 def write_to_csv(book, comment, filename=r"C:\Users\seki8\OneDrive\デスクトップ\python_lesson\読書ノート.csv"):
@@ -150,9 +149,15 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     #     write_to_csv(selected_book, comment)
     #     st.success("CSVに保存しました！")
 
-    if st.button("Excelに保存"):
-        write_to_excel_with_image(selected_book, comment)
-        st.success("Excelに保存しました（表紙付き）！")
+    # ✅ Streamlit 側のダウンロードボタン（呼び出し例）
+    if st.button("Excelでダウンロード（表紙付き）"):
+        excel_data = create_excel_with_image(selected_book, comment)
+        st.download_button(
+            label="📥 Excelファイルをダウンロード",
+            data=excel_data,
+            file_name="book_note.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 
 
