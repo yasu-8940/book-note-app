@@ -25,26 +25,28 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 def get_gdrive_service():
     creds = None
     token_path = 'token.pickle'
-    creds_path = 'credentials.json'
 
-    # ✅ Render 環境なら環境変数から credentials.json を生成
-    if os.getenv("GOOGLE_CREDENTIALS"):
-        creds_json = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-        with open(creds_path, "w") as f:
-            json.dump(creds_json, f)
-
-    # ✅ token.pickle があれば再利用
+    # --- 1. token.pickle があれば再利用 ---
     if os.path.exists(token_path):
         with open(token_path, 'rb') as token:
             creds = pickle.load(token)
 
-    # ✅ 認証がない or 有効期限切れなら再認証
+    # --- 2. 認証が無効なら再認証 ---
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+            # ✅ Renderではcredentials.jsonが無いので環境変数から読み込む
+            creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+            if not creds_json:
+                raise FileNotFoundError("環境変数 GOOGLE_CREDENTIALS が設定されていません。")
+
+            creds_dict = json.loads(creds_json)
+
+            flow = InstalledAppFlow.from_client_config(creds_dict, SCOPES)
             creds = flow.run_local_server(port=0)
+
+        # 認証情報を保存
         with open(token_path, 'wb') as token:
             pickle.dump(creds, token)
 
@@ -239,3 +241,4 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
         updated_file = upload_to_gdrive(service, file_id, excel_data)
 
         st.success(f"✅ Google Driveに上書き保存しました！ ({updated_file['name']})")
+
