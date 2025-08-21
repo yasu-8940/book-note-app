@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import json
 import pickle
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -26,10 +27,18 @@ def get_gdrive_service():
     token_path = 'token.pickle'
     creds_path = 'credentials.json'
 
+    # ✅ Render 環境なら環境変数から credentials.json を生成
+    if os.getenv("GOOGLE_CREDENTIALS"):
+        creds_json = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+        with open(creds_path, "w") as f:
+            json.dump(creds_json, f)
+
+    # ✅ token.pickle があれば再利用
     if os.path.exists(token_path):
         with open(token_path, 'rb') as token:
             creds = pickle.load(token)
 
+    # ✅ 認証がない or 有効期限切れなら再認証
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
