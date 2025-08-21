@@ -1,3 +1,4 @@
+import streamlit as st
 import os
 import pickle
 from googleapiclient.discovery import build
@@ -9,6 +10,10 @@ from io import BytesIO
 from openpyxl import Workbook, load_workbook
 from openpyxl.drawing.image import Image as XLImage
 from PIL import Image
+import io
+# from __future__ import print_function
+from pathlib import Path
+from googleapiclient.http import MediaIoBaseUpload
 
 # 🔹 Google Drive API のスコープ
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -41,8 +46,14 @@ def get_gdrive_service():
 # =========================================================
 def create_excel_with_image(book, comment, filename="book_note.xlsx"):
     if os.path.exists(filename):
-        wb = load_workbook(filename)
-        ws = wb.active
+        try:
+            wb = load_workbook(filename)
+            ws = wb.active
+        except Exception:
+            # 壊れている場合は作り直す
+            wb = Workbook()
+            ws = wb.active
+            ws.append(['登録日','書名','著者','出版社','出版日','概要','感想','表紙'])    
     else:
         wb = Workbook()
         ws = wb.active
@@ -67,12 +78,18 @@ def create_excel_with_image(book, comment, filename="book_note.xlsx"):
         img_path = "cover_tmp.png"
         img.save(img_path)
         excel_img = XLImage(img_path)
-        row_num = ws.max_row
-        ws.add_image(excel_img, f'H{row_num}')
+        ws.add_image(excel_img, f'H{ws.max_row}')
+
+    # ✅ バイナリ化して返す（これが重要！）
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    # ✅ 保存後に削除
+    if book['thumbnail'] and os.path.exists(img_path):
         os.remove(img_path)
 
-    wb.save(filename)
-    return filename
+    return bio.getvalue()
 
 # =========================================================
 # Google Drive にアップロード（存在すれば上書き）
@@ -100,8 +117,116 @@ def upload_to_gdrive(local_path, drive_filename="book_note.xlsx"):
         print(f"✅ 新規アップロードOK: {uploaded['id']}")
         return uploaded['id']
 
+# =========================================================
+# GoogleAPPから本を探す
+# =========================================================
+
+def search_books_google_books(title):
+    url = 'https://www.googleapis.com/books/v1/volumes'
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
+    params = {
+        'q': title,
+        'maxResults': 10,
+        'printType': 'books',
+        'langRestrict': 'ja',
+        # 'key': 'AIzaSyA0gXAcX6_aShRD4eKPA6ag_4QBTQtvC0w'
+    }
+    try:
+        response = requests.get(url, headers=headers, params=params)
 
 
+        data = response.json()
 
+        if 'items' not in data:
+            st.warning("⚠️ 書籍が見つかりませんでした。")
+            return []
 
+        results = []
 
+        for item in data['items']:
+            info = item['volumeInfo']
+            results.append({
+                'title': info.get('title', ''),
+                'authors': ', '.join(info.get('authors', [])),
+                'publishedDate': info.get('publishedDate', ''),
+                'description': info.get('description', ''),
+                'thumbnail': info.get('imageLinks', {}).get('thumbnail', ''),
+                'publisher': info.get('publisher', ''),
+         })
+        return results
+
+    except Exception as e:
+        st.error(f"エラーが発生しました: {e}")
+        return []
+
+# Google Drive 上書き保存関数
+def upload_to_gdrive(service, file_id, excel_data, filename="book_note.xlsx"):
+    media = MediaIoBaseUpload(io.BytesIO(excel_data), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", resumable=True)
+    updated_file = service.files().update(
+        fileId=file_id,
+        media_body=media
+    ).execute()
+    return updated_file
+
+# =========================================================
+# Streamlit アプリ
+# =========================================================
+st.title("📚 読書ノート:シリーズ対応版（Google Books API）")
+
+search_query = st.text_input("書名を入力してください（シリーズ名もOK）：")
+
+if st.button("候補を検索"):
+    try:
+        results = search_books_google_books(search_query)
+        st.session_state['search_results'] = results
+    except Exception as e:
+        st.error(f"⚠️ エラーが発生しました: {e}")
+    # results = search_books_google_books(search_query)
+    # st.session_state['search_results'] = results
+
+# 結果がある場合のみ処理
+if 'search_results' in st.session_state and st.session_state['search_results']:
+    results = st.session_state['search_results']
+    options = [f"{book['title']} / {book['authors']}" for book in results]
+    
+    # 🔑 radioボタンは毎回再描画されるように
+    selected = st.radio("候補から選んでください：", options, key="book_radio")
+    selected_book = results[options.index(selected)]
+
+    # 詳細表示
+    st.subheader(selected_book['title'])
+    st.write(f"著者: {selected_book['authors']}")
+    st.write(f"出版社: {selected_book['publisher']}")
+    st.write(f"出版日: {selected_book['publishedDate']}")
+    st.write("概要:")
+    st.write(selected_book['description'])
+
+    if selected_book['thumbnail']:
+        st.image(selected_book['thumbnail'], caption='表紙画像', width=150)
+
+    # 感想入力
+    st.markdown("---")
+    comment = st.text_area("📖 感想を入力してください:")
+
+    # ✅ Streamlit 側のダウンロードボタン（呼び出し例）
+    if st.button("Excelでダウンロード（表紙付き）"):
+        excel_data = create_excel_with_image(selected_book, comment)
+        st.download_button(
+            label="📥 Excelファイルをダウンロード",
+            data=excel_data,
+            file_name="book_note.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    # ✅ Streamlit Google Drive保存ボタン 
+    if st.button("📤 Google Driveに保存（上書き）"):
+        excel_data = create_excel_with_image(selected_book, comment)
+
+        # 事前にファイルIDを保存しておく（初回だけアップロードしてID取得）
+        file_id = "1a9jmvgdg1W9mnsdoCL8Qv6wAqkBHJFRp"  # あなたのDrive上の book_note.xlsx のID
+        service = get_gdrive_service()
+        updated_file = upload_to_gdrive(service, file_id, excel_data)
+
+        st.success(f"✅ Google Driveに上書き保存しました！ ({updated_file['name']})")
