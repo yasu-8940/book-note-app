@@ -3,8 +3,9 @@ import os
 import json
 import pickle
 from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials
+# from google_auth_oauthlib.flow import InstalledAppFlow
+# from google.auth.transport.requests import Request
 from datetime import datetime
 import requests
 from io import BytesIO
@@ -22,37 +23,30 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 # =========================================================
 # Google Drive サービス取得
 # =========================================================
+
 def get_gdrive_service():
+    """
+    Google Drive API サービスを返す（サービスアカウント方式）
+    Render環境では環境変数 GOOGLE_CREDENTIALS から読み込み、
+    ローカル環境では service_account.json を読み込む
+    """
     creds = None
-    token_path = 'token.pickle'
 
-    # --- 1. token.pickle があれば再利用 ---
-    if os.path.exists(token_path):
-        with open(token_path, 'rb') as token:
-            creds = pickle.load(token)
+    # Render（環境変数に JSON 丸ごと入っている想定）
+    if "GOOGLE_CREDENTIALS" in os.environ:
+        service_account_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+        creds = Credentials.from_service_account_info(
+            service_account_info, scopes=SCOPES
+        )
+    # ローカル（ファイルをそのまま置いておく場合）
+    elif os.path.exists("service_account.json"):
+        creds = Credentials.from_service_account_file(
+            "service_account.json", scopes=SCOPES
+        )
+    else:
+        raise FileNotFoundError("サービスアカウントの認証情報が見つかりません。")
 
-    # --- 2. 認証が無効なら再認証 ---
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        
-        else:
-            creds_json = os.environ.get("GOOGLE_CREDENTIALS")
-            if creds_json:
-                # Renderなどクラウド環境：環境変数からロード
-                creds_dict = json.loads(creds_json)
-                flow = InstalledAppFlow.from_client_config(creds_dict, SCOPES)
-            else:
-                # ローカル環境：credentials.json を読む
-                flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-
-            creds = flow.run_local_server(port=0)
-
-        # トークンを保存（ローカルでもRenderでも使える）
-        with open(token_path, "wb") as token:
-            pickle.dump(creds, token)
-
-    return build('drive', 'v3', credentials=creds)
+    return build("drive", "v3", credentials=creds)
 
 # =========================================================
 # Excel ファイル作成（表紙画像付き）
@@ -175,13 +169,39 @@ def search_books_google_books(title):
         return []
 
 # Google Drive 上書き保存関数
-def upload_to_gdrive(service, file_id, excel_data, filename="book_note.xlsx"):
-    media = MediaIoBaseUpload(io.BytesIO(excel_data), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", resumable=True)
-    updated_file = service.files().update(
-        fileId=file_id,
-        media_body=media
-    ).execute()
-    return updated_file
+def upload_to_drive(excel_data, folder_id, filename="book_note.xlsx"):
+    service = get_gdrive_service()
+
+    # 既存ファイルがあるか検索
+    query = f"'{folder_id}' in parents and name='{filename}' and trashed=false"
+    results = service.files().list(q=query, fields="files(id)").execute()
+    items = results.get("files", [])
+
+    media = MediaIoBaseUpload(
+        io.BytesIO(excel_data),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    if items:
+        # 更新（上書き）
+        file_id = items[0]["id"]
+        updated_file = service.files().update(
+            fileId=file_id,
+            media_body=media
+        ).execute()
+        print(f"✅ 上書き保存OK: {filename} ({file_id})")
+    else:
+        # 新規作成
+        file_metadata = {
+            "name": filename,
+            "parents": [folder_id]
+        }
+        new_file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id"
+        ).execute()
+        print(f"✅ 新規作成OK: {filename} ({new_file['id']})")
 
 # =========================================================
 # Streamlit アプリ
@@ -235,13 +255,16 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
 
     # ✅ Streamlit Google Drive保存ボタン 
     if st.button("📤 Google Driveに保存（上書き）"):
+
+        # 生成した Excel のバイナリをアップロード
         excel_data = create_excel_with_image(selected_book, comment)
 
-        # 事前にファイルIDを保存しておく（初回だけアップロードしてID取得）
-        file_id = "1a9jmvgdg1W9mnsdoCL8Qv6wAqkBHJFRp"  # あなたのDrive上の book_note.xlsx のID
-        service = get_gdrive_service()
-        updated_file = upload_to_gdrive(service, file_id, excel_data)
+        # ユーザーの指定フォルダに保存
+        folder_id = "1CP9mzd7dOaPG9Fj88vY6OYSKwl7el1XT"
+        upload_to_drive(excel_data, folder_id)
 
         st.success(f"✅ Google Driveに上書き保存しました！ ({updated_file['name']})")
+
+
 
 
