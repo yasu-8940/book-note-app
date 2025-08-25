@@ -4,18 +4,18 @@ import json
 import pickle
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
-# from google_auth_oauthlib.flow import InstalledAppFlow
-# from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
 from datetime import datetime
+from google.auth.transport.requests import Request
 import requests
 from io import BytesIO
 from openpyxl import Workbook, load_workbook
 from openpyxl.drawing.image import Image as XLImage
 from PIL import Image
-import io
+import io, requests
 # from __future__ import print_function
 from pathlib import Path
-from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
 # 🔹 Google Drive API のスコープ
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -26,76 +26,79 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 def get_gdrive_service():
     """
-    Google Drive API サービスを返す（サービスアカウント方式）
-    Render環境では環境変数 GOOGLE_CREDENTIALS から読み込み、
-    ローカル環境では service_account.json を読み込む
+    Google Drive API サービスを返す（OAuthトークン方式）
+    Render環境では環境変数 TOKEN_PICKLE_B64 から復元して利用
+    ローカル環境では token.pickle を直接利用
     """
     creds = None
+    token_path = "token.pickle"
+    creds_path = "credentials.json"
 
-    # Render（環境変数に JSON 丸ごと入っている想定）
-    if "GOOGLE_CREDENTIALS" in os.environ:
-        service_account_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
-        creds = Credentials.from_service_account_info(
-            service_account_info, scopes=SCOPES
-        )
-    # ローカル（ファイルをそのまま置いておく場合）
-    elif os.path.exists("service_account.json"):
-        creds = Credentials.from_service_account_file(
-            "service_account.json", scopes=SCOPES
-        )
-    else:
-        raise FileNotFoundError("サービスアカウントの認証情報が見つかりません。")
+    # Render環境（TOKEN_PICKLE_B64 を優先）
+    if "TOKEN_PICKLE_B64" in os.environ:
+        import base64
+        data = base64.b64decode(os.environ["TOKEN_PICKLE_B64"])
+        creds = pickle.loads(data)
+
+    # ローカル環境
+    elif os.path.exists(token_path):
+        with open(token_path, "rb") as token:
+            creds = pickle.load(token)
+
+    # トークンが無効または存在しない場合
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not os.path.exists(creds_path):
+                raise FileNotFoundError("credentials.json が見つかりません。")
+            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+            creds = flow.run_local_server(port=0)
+
+        # ローカルでは更新したトークンを保存しておく
+        if not "TOKEN_PICKLE_B64" in os.environ:
+            with open(token_path, "wb") as token:
+                pickle.dump(creds, token)
 
     return build("drive", "v3", credentials=creds)
 
 # =========================================================
 # Excel ファイル作成（表紙画像付き）
 # =========================================================
-def create_excel_with_image(book, comment, filename="book_note.xlsx"):
-    if os.path.exists(filename):
-        try:
-            wb = load_workbook(filename)
-            ws = wb.active
-        except Exception:
-            # 壊れている場合は作り直す
-            wb = Workbook()
-            ws = wb.active
-            ws.append(['登録日','書名','著者','出版社','出版日','概要','感想','表紙'])    
+def create_excel_with_image(book, comment, base_xlsx_bytes=None, filename="book_note.xlsx"):
+
+    # 既存ファイルのBytesが来ていればそれをベースに、無ければ新規
+    if base_xlsx_bytes:
+        wb = load_workbook(filename=BytesIO(base_xlsx_bytes))
+        ws = wb.active
     else:
         wb = Workbook()
         ws = wb.active
-        ws.append(['登録日', '書名', '著者', '出版社', '出版日', '概要', '感想', '表紙'])
+        ws.append(['登録日','書名','著者','出版社','出版日','概要','感想','表紙'])
 
     today = datetime.today().strftime("%Y-%m-%d")
-    row = [
+    ws.append([
         today,
-        book['title'],
-        book['authors'],
-        book['publisher'],
-        book['publishedDate'],
-        book['description'],
+        book.get('title',''),
+        book.get('authors',''),
+        book.get('publisher',''),
+        book.get('publishedDate',''),
+        book.get('description',''),
         comment,
-        '',  # 画像用
-    ]
-    ws.append(row)
+        ''
+    ])
 
-    if book['thumbnail']:
-        response = requests.get(book['thumbnail'])
-        img = Image.open(BytesIO(response.content))
-        img_path = "cover_tmp.png"
-        img.save(img_path)
-        excel_img = XLImage(img_path)
-        ws.add_image(excel_img, f'H{ws.max_row}')
+    # 表紙（PIL→openpyxl 直接渡し）
+    if book.get('thumbnail'):
+        r = requests.get(book['thumbnail'], timeout=10)
+        r.raise_for_status()
+        img_pil = Image.open(BytesIO(r.content))
+        excel_img = XLImage(img_pil)
+        ws.add_image(excel_img, f"H{ws.max_row}")
 
-    # ✅ バイナリ化して返す（これが重要！）
     bio = io.BytesIO()
     wb.save(bio)
     bio.seek(0)
-
-    # ✅ 保存後に削除
-    if book['thumbnail'] and os.path.exists(img_path):
-        os.remove(img_path)
-
     return bio.getvalue()
 
 # =========================================================
@@ -204,6 +207,30 @@ def upload_to_drive(excel_data, folder_id, filename="book_note.xlsx"):
         print(f"✅ 新規作成OK: {filename} ({new_file['id']})")
 
 # =========================================================
+# Driveからファイルをダウンロード
+# =========================================================
+
+def download_from_drive(folder_id, filename="book_note.xlsx"):
+    service = get_gdrive_service()
+
+    # Drive上にファイルがあるか検索
+    query = f"'{folder_id}' in parents and name='{filename}' and trashed=false"
+    results = service.files().list(q=query, fields="files(id)").execute()
+    items = results.get("files", [])
+
+    if not items:
+        return None  # ファイルがまだ存在しない
+
+    file_id = items[0]["id"]
+    request = service.files().get_media(fileId=file_id)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+    return fh.getvalue()
+
+# =========================================================
 # Streamlit アプリ
 # =========================================================
 st.title("📚 読書ノート:シリーズ対応版（Google Books API）")
@@ -256,15 +283,18 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     # ✅ Streamlit Google Drive保存ボタン 
     if st.button("📤 Google Driveに保存（上書き）"):
 
-        # 生成した Excel のバイナリをアップロード
-        excel_data = create_excel_with_image(selected_book, comment)
-
-        # ユーザーの指定フォルダに保存
         folder_id = "1CP9mzd7dOaPG9Fj88vY6OYSKwl7el1XT"
-        upload_to_drive(excel_data, folder_id)
 
-        st.success(f"✅ Google Driveに上書き保存しました！ ({updated_file['name']})")
+        # 1. Driveから既存Excelをダウンロード
+        existing_bytes = download_from_drive(folder_id, "book_note.xlsx")
 
+        # 2. 行を追加
+        excel_data = create_excel_with_image(selected_book, comment, base_xlsx_bytes=existing_bytes)
+        
+        # 3. Drive へ保存（ここで folder_id を使う）
+
+        upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
+        st.success("✅ Google Driveに保存しました！")
 
 
 
