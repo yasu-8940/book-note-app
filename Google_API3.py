@@ -26,39 +26,23 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 def get_gdrive_service():
     """
-    Google Drive API サービスを返す（OAuthトークン方式）
-    Render環境では環境変数 TOKEN_PICKLE_B64 から復元して利用
-    ローカル環境では token.pickle を直接利用
+    Google Drive API サービスを返す（サービスアカウント方式）
+    Renderでは環境変数 GOOGLE_CREDENTIALS から読み込み、
+    ローカルでは service_account.json を読み込む
     """
     creds = None
-    token_path = "token.pickle"
-    creds_path = "credentials.json"
 
-    # Render環境（TOKEN_PICKLE_B64 を優先）
-    if "TOKEN_PICKLE_B64" in os.environ:
-        import base64
-        data = base64.b64decode(os.environ["TOKEN_PICKLE_B64"])
-        creds = pickle.loads(data)
+    # Render 環境
+    if "GOOGLE_CREDENTIALS" in os.environ:
+        service_account_info = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+        creds = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
 
     # ローカル環境
-    elif os.path.exists(token_path):
-        with open(token_path, "rb") as token:
-            creds = pickle.load(token)
+    elif os.path.exists("service_account.json"):
+        creds = Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
 
-    # トークンが無効または存在しない場合
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            if not os.path.exists(creds_path):
-                raise FileNotFoundError("credentials.json が見つかりません。")
-            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-            creds = flow.run_local_server(port=0)
-
-        # ローカルでは更新したトークンを保存しておく
-        if not "TOKEN_PICKLE_B64" in os.environ:
-            with open(token_path, "wb") as token:
-                pickle.dump(creds, token)
+    else:
+        raise FileNotFoundError("サービスアカウントの認証情報が見つかりません。")
 
     return build("drive", "v3", credentials=creds)
 
@@ -295,6 +279,4 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
 
         upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
         st.success("✅ Google Driveに保存しました！")
-
-
 
