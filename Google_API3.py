@@ -56,7 +56,7 @@ def create_excel_with_image(book, comment, base_xlsx_bytes=None, filename="book_
 
     # 既存ファイルのBytesが来ていればそれをベースに、無ければ新規
     if base_xlsx_bytes:
-        wb = load_workbook(file=BytesIO(base_xlsx_bytes))
+        wb = load_workbook(filename=BytesIO(base_xlsx_bytes))
         ws = wb.active
     else:
         wb = Workbook()
@@ -292,4 +292,5 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
         file_id, modified, version = upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
         st.success(f"✅ Google Driveに保存しました！\nID: {file_id}\n更新時刻: {modified}\n版: {version}")
         st.caption(f"https://drive.google.com/file/d/{file_id}/view")
+
 
