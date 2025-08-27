@@ -26,12 +26,12 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 # =========================================================
 
 def get_gdrive_service():
+
     """Google Drive API サービスを返す（OAuth 方式）"""
     creds = None
 
     # Render 環境: TOKEN_PICKLE_B64 を優先
     if "TOKEN_PICKLE_B64" in os.environ:
-        import base64, pickle
         token_bytes = base64.b64decode(os.environ["TOKEN_PICKLE_B64"])
         creds = pickle.loads(token_bytes)
 
@@ -40,13 +40,12 @@ def get_gdrive_service():
         with open("token.pickle", "rb") as token:
             creds = pickle.load(token)
 
-    # 有効期限切れならリフレッシュ
+    # 期限切れならリフレッシュ
     if creds and creds.expired and creds.refresh_token:
-        from google.auth.transport.requests import Request
         creds.refresh(Request())
 
     if not creds:
-        raise FileNotFoundError("OAuth 認証情報 (token.pickle) が見つかりません。")
+        raise FileNotFoundError("token.pickle が見つかりません。")
 
     return build("drive", "v3", credentials=creds)
 
@@ -283,3 +282,4 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
 
         upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
         st.success("✅ Google Driveに保存しました！")
+
