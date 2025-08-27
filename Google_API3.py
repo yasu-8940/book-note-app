@@ -56,7 +56,7 @@ def create_excel_with_image(book, comment, base_xlsx_bytes=None, filename="book_
 
     # 既存ファイルのBytesが来ていればそれをベースに、無ければ新規
     if base_xlsx_bytes:
-        wb = load_workbook(filename=BytesIO(base_xlsx_bytes))
+        wb = load_workbook(file=BytesIO(base_xlsx_bytes))
         ws = wb.active
     else:
         wb = Workbook()
@@ -215,6 +215,7 @@ def download_from_drive(folder_id, filename="book_note.xlsx"):
     done = False
     while not done:
         status, done = downloader.next_chunk()
+    fh.seek(0)    
     return fh.getvalue()
 
 # =========================================================
@@ -239,7 +240,7 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
     options = [f"{book['title']} / {book['authors']}" for book in results]
     
     # 🔑 radioボタンは毎回再描画されるように
-    selected = st.radio("候補から選んでください：", options, key="book_radio")
+    selected = st.radio("候補から選んでください：", options, key=f"book_radio_{search_query}")
     selected_book = results[options.index(selected)]
 
     # 詳細表示
@@ -276,10 +277,15 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
         existing_bytes = download_from_drive(folder_id, "book_note.xlsx")
 
         # 2. 行を追加
+        print("DEBUG 選択書籍:", selected_book['title'])
+        print("DEBUG 感想:", comment)
+        print("DEBUG 既存行数:", len(load_workbook(file=BytesIO(existing_bytes)).active['A']))
         excel_data = create_excel_with_image(selected_book, comment, base_xlsx_bytes=existing_bytes)
         
         # 3. Drive へ保存（ここで folder_id を使う）
 
         upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
         st.success("✅ Google Driveに保存しました！")
+
+
 
