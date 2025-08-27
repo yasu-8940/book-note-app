@@ -276,16 +276,20 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
         # 1. Driveから既存Excelをダウンロード
         existing_bytes = download_from_drive(folder_id, "book_note.xlsx")
 
+        # 既存状況のデバッグ表示
+        if existing_bytes:
+            wb_tmp = load_workbook(file=BytesIO(existing_bytes))  # ← file= を使う
+            st.info(f"DEBUG: 今の最終行（保存前）: {wb_tmp.active.max_row}")
+        else:
+            st.info("DEBUG: 既存ファイルなし（新規作成）")
+
         # 2. 行を追加
-        print("DEBUG 選択書籍:", selected_book['title'])
-        print("DEBUG 感想:", comment)
-        print("DEBUG 既存行数:", len(load_workbook(file=BytesIO(existing_bytes)).active['A']))
+        st.write("DEBUG 選択書籍:", selected_book.get('title'))
+        st.write("DEBUG 感想:", comment)
         excel_data = create_excel_with_image(selected_book, comment, base_xlsx_bytes=existing_bytes)
-        
-        # 3. Drive へ保存（ここで folder_id を使う）
 
-        upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
-        st.success("✅ Google Driveに保存しました！")
-
-
+        # 3. Drive へ保存（結果も確認表示）
+        file_id, modified, version = upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
+        st.success(f"✅ Google Driveに保存しました！\nID: {file_id}\n更新時刻: {modified}\n版: {version}")
+        st.caption(f"https://drive.google.com/file/d/{file_id}/view")
 
