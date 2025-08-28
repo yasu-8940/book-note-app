@@ -63,11 +63,19 @@ def create_excel_with_image(book, comment, base_xlsx_bytes=None, filename="book_
         ws = wb.active
         ws.append(['登録日','書名','著者','出版社','出版日','概要','感想','表紙'])
     
-    # 既存ワークシートの実データ最終行を計算する   
-    max_row = 1
-    for row in ws.iter_rows(values_only=True):
+    # 実際に値が入っている最後の行番号を探す
+    last_row = 0
+    for idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
         if any(cell is not None for cell in row):
-            max_row += 1
+            last_row = idx
+            print(last_row)
+
+    # 追加行はその次の行
+    next_row = last_row + 1
+
+    print("ws.max_row (openpyxl認識):", ws.max_row)
+    print("last_row (実データ判定):", last_row)
+    print("row_num (これから書き込む):", next_row)
 
     today = datetime.today().strftime("%Y-%m-%d")
     ws.append([
@@ -274,5 +282,3 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
         file_id, modified, version = upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
         st.success(f"✅ Google Driveに保存しました！\nID: {file_id}\n更新時刻: {modified}\n版: {version}")
         st.caption(f"https://drive.google.com/file/d/{file_id}/view")
-
-
