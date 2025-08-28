@@ -62,6 +62,12 @@ def create_excel_with_image(book, comment, base_xlsx_bytes=None, filename="book_
         wb = Workbook()
         ws = wb.active
         ws.append(['登録日','書名','著者','出版社','出版日','概要','感想','表紙'])
+    
+    # 既存ワークシートの実データ最終行を計算する   
+    max_row = 1
+    for row in ws.iter_rows(values_only=True):
+        if any(cell is not None for cell in row):
+            max_row += 1
 
     today = datetime.today().strftime("%Y-%m-%d")
     ws.append([
@@ -87,32 +93,6 @@ def create_excel_with_image(book, comment, base_xlsx_bytes=None, filename="book_
     wb.save(bio)
     bio.seek(0)
     return bio.getvalue()
-
-# =========================================================
-# Google Drive にアップロード（存在すれば上書き）
-# =========================================================
-def upload_to_gdrive(local_path, drive_filename="book_note.xlsx"):
-    service = get_gdrive_service()
-
-    # 既存ファイルを探す
-    query = f"name='{drive_filename}' and trashed=false"
-    results = service.files().list(q=query, fields="files(id, name)").execute()
-    items = results.get('files', [])
-
-    file_metadata = {"name": drive_filename}
-    media = MediaFileUpload(local_path, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-    if items:
-        # 既存ファイルを上書き
-        file_id = items[0]['id']
-        updated = service.files().update(fileId=file_id, media_body=media).execute()
-        print(f"✅ 上書き保存OK: {updated['name']} ({file_id})")
-        return file_id
-    else:
-        # 新規アップロード
-        uploaded = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-        print(f"✅ 新規アップロードOK: {uploaded['id']}")
-        return uploaded['id']
 
 # =========================================================
 # GoogleAPPから本を探す
@@ -157,8 +137,11 @@ def search_books_google_books(title):
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
         return []
-
+    
+# =========================================================
 # Google Drive 上書き保存関数
+# =========================================================
+
 def upload_to_drive(excel_data, folder_id, filename="book_note.xlsx"):
     service = get_gdrive_service()
 
@@ -169,7 +152,8 @@ def upload_to_drive(excel_data, folder_id, filename="book_note.xlsx"):
 
     media = MediaIoBaseUpload(
         io.BytesIO(excel_data),
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        resumable=False
     )
 
     if items:
@@ -177,21 +161,19 @@ def upload_to_drive(excel_data, folder_id, filename="book_note.xlsx"):
         file_id = items[0]["id"]
         updated_file = service.files().update(
             fileId=file_id,
-            media_body=media
+            media_body=media,
+            fields="id, name, modifiedTime, version"
         ).execute()
-        print(f"✅ 上書き保存OK: {filename} ({file_id})")
+        return updated_file["id"], updated_file["modifiedTime"], updated_file.get("version")
     else:
         # 新規作成
-        file_metadata = {
-            "name": filename,
-            "parents": [folder_id]
-        }
+        file_metadata = {"name": filename, "parents": [folder_id]}
         new_file = service.files().create(
             body=file_metadata,
             media_body=media,
-            fields="id"
+            fields="id, name, modifiedTime, version"
         ).execute()
-        print(f"✅ 新規作成OK: {filename} ({new_file['id']})")
+        return new_file["id"], new_file["modifiedTime"], new_file.get("version")
 
 # =========================================================
 # Driveからファイルをダウンロード
@@ -292,6 +274,5 @@ if 'search_results' in st.session_state and st.session_state['search_results']:
         file_id, modified, version = upload_to_drive(excel_data, folder_id, filename="book_note.xlsx")
         st.success(f"✅ Google Driveに保存しました！\nID: {file_id}\n更新時刻: {modified}\n版: {version}")
         st.caption(f"https://drive.google.com/file/d/{file_id}/view")
-
 
 
