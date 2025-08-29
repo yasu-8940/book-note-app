@@ -17,9 +17,49 @@ import io, requests
 # from __future__ import print_function
 from pathlib import Path
 from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload, MediaIoBaseDownload
+from openpyxl.styles import Alignment, Font, PatternFill
 
 # 🔹 Google Drive API のスコープ
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
+
+# =========================================================
+# 見栄えを整える（列幅・行高さ・セル配置など）
+# =========================================================
+
+def format_excel(ws):
+
+    # 列幅設定
+    col_widths = {
+        "A": 10, "B": 25, "C": 15, "D": 20,
+        "E": 10, "F": 40, "G": 40, "H": 15
+    }
+    for col, width in col_widths.items():
+        ws.column_dimensions[col].width = width
+
+    # 行の高さ：2行目以降はすべて150
+    for row in range(2, ws.max_row + 1):
+        ws.row_dimensions[row].height = 150
+
+    # A〜H列：縦位置 上詰め
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=8):
+        for cell in row:
+            cell.alignment = Alignment(vertical="top")
+
+    # F, G列：折り返して表示
+    for col in ["F", "G"]:
+        for row in range(2, ws.max_row + 1):
+            ws[f"{col}{row}"].alignment = Alignment(vertical="top", wrap_text=True)
+
+    # --- ヘッダー行の装飾（1行目） ---
+    header_fill = PatternFill(start_color="87CEEB", end_color="87CEEB", fill_type="solid")  # スカイブルー
+    header_font = Font(bold=True)
+
+    for cell in ws[1]:  # 1行目の全セル
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.font = header_font
+        cell.fill = header_fill
+
+    return ws
 
 # =========================================================
 # Google Drive サービス取得
@@ -96,6 +136,9 @@ def create_excel_with_image(book, comment, base_xlsx_bytes=None, filename="book_
         img_pil = Image.open(BytesIO(r.content))
         excel_img = XLImage(img_pil)
         ws.add_image(excel_img, f"H{ws.max_row}")
+
+    # 書き込み処理が全部終わったあとに…
+    format_excel(ws)
 
     bio = io.BytesIO()
     wb.save(bio)
